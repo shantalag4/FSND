@@ -147,12 +147,34 @@ def venues():
   data = _venues()
   return render_template('pages/venues.html', areas=data)
 
+def _search_venue(search_term):
+  venues = Venue.query.filter(Venue.name.ilike("%" + search_term + "%")).all()
+  response = {
+    "count" : len(venues),
+    "data" : []
+  }
+  for venue in venues:
+    response.get("data").append({
+      'id' : venue.id,
+      'name' : venue.name,
+      'num_upcoming_shows' : len(venue.upcoming_shows)
+    })
+  return response
+
+@app.route('/api/search_venues/<string:search_term>')
+def api_search_venues(search_term):
+  response = _search_venue(search_term)
+  return jsonify(response)
+
 @app.route('/venues/search', methods=['POST'])
 def search_venues():
   # TODO: implement search on artists with partial string search. Ensure it is case-insensitive.
   # seach for Hop should return "The Musical Hop".
   # search for "Music" should return "The Musical Hop" and "Park Square Live Music & Coffee"
-  response={
+  search_term = request.form.get('search_term', '')
+  response = _search_venue(search_term)
+
+  response1={
     "count": 1,
     "data": [{
       "id": 2,
