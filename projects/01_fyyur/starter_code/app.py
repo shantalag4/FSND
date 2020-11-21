@@ -48,8 +48,9 @@ class Venue(db.Model):
     phone = db.Column(db.String(120))
     image_link = db.Column(db.String(500))
     facebook_link = db.Column(db.String(120))
-    upcoming_shows = db.relationship('Show', backref='list', lazy=True, primaryjoin='and_(Venue.id == Show.venue_id, Show.start_date > func.current_date())')
-    genres = db.relationship('VenueGenre', backref='list', lazy=True, primaryjoin='and_(Venue.id == VenueGenre.venue_id)')
+    upcoming_shows = db.relationship('Show', backref='upcoming_list', lazy=True, primaryjoin='and_(Venue.id == Show.venue_id, Show.start_date > func.current_date())')
+    past_shows = db.relationship('Show', backref='past_list', lazy=True, primaryjoin='and_(Venue.id == Show.venue_id, Show.start_date < func.current_date())')
+    genres = db.relationship('VenueGenre', backref='genres_list', lazy=True, primaryjoin='and_(Venue.id == VenueGenre.venue_id)')
     seeking_talent = db.Column(db.Boolean)
     seeking_description = db.Column(db.String(500))
     website = db.Column(db.String(500))
@@ -84,7 +85,9 @@ class Artist(db.Model):
 class Show(db.Model):
   id = db.Column(db.Integer,primary_key=True)
   venue_id = db.Column(db.Integer, db.ForeignKey(Venue.id))
+  venue = db.relationship('Venue',backref='list',lazy=True, primaryjoin='and_(Show.venue_id==Venue.id)')
   artist_id = db.Column(db.Integer, db.ForeignKey(Artist.id))
+  artist = db.relationship('Artist',backref='list',lazy=True,primaryjoin='and_(Show.artist_id==Artist.id)')
   start_date = db.Column(db.DateTime)
 
 #----------------------------------------------------------------------------#
@@ -173,99 +176,95 @@ def search_venues():
   # search for "Music" should return "The Musical Hop" and "Park Square Live Music & Coffee"
   search_term = request.form.get('search_term', '')
   response = _search_venue(search_term)
-
-  response1={
-    "count": 1,
-    "data": [{
-      "id": 2,
-      "name": "The Dueling Pianos Bar",
-      "num_upcoming_shows": 0,
-    }]
-  }
   return render_template('pages/search_venues.html', results=response, search_term=request.form.get('search_term', ''))
+
+@app.route('/api/venues/<int:venue_id>')
+def api_show_venue(venue_id):
+  venue = Venue.query.filter(Venue.id==venue_id).first()
+  data = []
+  pastShows = []
+  for d in venue.past_shows:
+    pastShows.append({
+      'artist_id' : d.artist_id,
+      'start_time' : d.start_date,
+      'artist_name' : d.artist.name,
+      'artist_image_link' : d.artist.image_link
+    })
+  
+  upcomingShows = []
+  for d in venue.upcoming_shows:
+    upcomingShows.append({
+      'artist_id' : d.artist_id,
+      'start_time' : d.start_date,
+      'artist_name' : d.artist.name,
+      'artist_image_link' : d.artist.image_link
+    })
+    
+  data.append({
+    'id' : venue.id,
+    'name' : venue.name,
+    'genres' : venue.genres,
+    'address' : venue.address,
+    'city' : venue.city,
+    'state' : venue.city,
+    'phone' : venue.phone,
+    'website' : venue.website,
+    'facebook_link' : venue.facebook_link,
+    'seeking_talent' : venue.seeking_talent,
+    'seeking_description' : venue.seeking_description,
+    'image_link' : venue.image_link,
+    'past_shows':pastShows,
+    'past_shows_count' : len(venue.past_shows),
+    'upcoming_shows' : upcomingShows,
+    'upcoming_shows_count' : len(venue.upcoming_shows)
+  })
+  
+  return jsonify(data)
+
+def _show_venue(venue_id):
+  venue = Venue.query.filter(Venue.id==venue_id).first()
+  pastShows = []
+  for d in venue.past_shows:
+    pastShows.append({
+      'artist_id' : d.artist_id,
+      'start_time' : d.start_date.isoformat(),
+      'artist_name' : d.artist.name,
+      'artist_image_link' : d.artist.image_link
+    })
+  
+  upcomingShows = []
+  for d in venue.upcoming_shows:
+    upcomingShows.append({
+      'artist_id' : d.artist_id,
+      'start_time' : d.start_date.isoformat(),
+      'artist_name' : d.artist.name,
+      'artist_image_link' : d.artist.image_link
+    })
+    
+  return {
+    'id' : venue.id,
+    'name' : venue.name,
+    'genres' : venue.genres,
+    'address' : venue.address,
+    'city' : venue.city,
+    'state' : venue.city,
+    'phone' : venue.phone,
+    'website' : venue.website,
+    'facebook_link' : venue.facebook_link,
+    'seeking_talent' : venue.seeking_talent,
+    'seeking_description' : venue.seeking_description,
+    'image_link' : venue.image_link,
+    'past_shows':pastShows,
+    'past_shows_count' : len(venue.past_shows),
+    'upcoming_shows' : upcomingShows,
+    'upcoming_shows_count' : len(venue.upcoming_shows)
+  }
 
 @app.route('/venues/<int:venue_id>')
 def show_venue(venue_id):
   # shows the venue page with the given venue_id
   # TODO: replace with real venue data from the venues table, using venue_id
-  data1={
-    "id": 1,
-    "name": "The Musical Hop",
-    "genres": ["Jazz", "Reggae", "Swing", "Classical", "Folk"],
-    "address": "1015 Folsom Street",
-    "city": "San Francisco",
-    "state": "CA",
-    "phone": "123-123-1234",
-    "website": "https://www.themusicalhop.com",
-    "facebook_link": "https://www.facebook.com/TheMusicalHop",
-    "seeking_talent": True,
-    "seeking_description": "We are on the lookout for a local artist to play every two weeks. Please call us.",
-    "image_link": "https://images.unsplash.com/photo-1543900694-133f37abaaa5?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=400&q=60",
-    "past_shows": [{
-      "artist_id": 4,
-      "artist_name": "Guns N Petals",
-      "artist_image_link": "https://images.unsplash.com/photo-1549213783-8284d0336c4f?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=300&q=80",
-      "start_time": "2019-05-21T21:30:00.000Z"
-    }],
-    "upcoming_shows": [],
-    "past_shows_count": 1,
-    "upcoming_shows_count": 0,
-  }
-  data2={
-    "id": 2,
-    "name": "The Dueling Pianos Bar",
-    "genres": ["Classical", "R&B", "Hip-Hop"],
-    "address": "335 Delancey Street",
-    "city": "New York",
-    "state": "NY",
-    "phone": "914-003-1132",
-    "website": "https://www.theduelingpianos.com",
-    "facebook_link": "https://www.facebook.com/theduelingpianos",
-    "seeking_talent": False,
-    "image_link": "https://images.unsplash.com/photo-1497032205916-ac775f0649ae?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=750&q=80",
-    "past_shows": [],
-    "upcoming_shows": [],
-    "past_shows_count": 0,
-    "upcoming_shows_count": 0,
-  }
-  data3={
-    "id": 3,
-    "name": "Park Square Live Music & Coffee",
-    "genres": ["Rock n Roll", "Jazz", "Classical", "Folk"],
-    "address": "34 Whiskey Moore Ave",
-    "city": "San Francisco",
-    "state": "CA",
-    "phone": "415-000-1234",
-    "website": "https://www.parksquarelivemusicandcoffee.com",
-    "facebook_link": "https://www.facebook.com/ParkSquareLiveMusicAndCoffee",
-    "seeking_talent": False,
-    "image_link": "https://images.unsplash.com/photo-1485686531765-ba63b07845a7?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=747&q=80",
-    "past_shows": [{
-      "artist_id": 5,
-      "artist_name": "Matt Quevedo",
-      "artist_image_link": "https://images.unsplash.com/photo-1495223153807-b916f75de8c5?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=334&q=80",
-      "start_time": "2019-06-15T23:00:00.000Z"
-    }],
-    "upcoming_shows": [{
-      "artist_id": 6,
-      "artist_name": "The Wild Sax Band",
-      "artist_image_link": "https://images.unsplash.com/photo-1558369981-f9ca78462e61?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=794&q=80",
-      "start_time": "2035-04-01T20:00:00.000Z"
-    }, {
-      "artist_id": 6,
-      "artist_name": "The Wild Sax Band",
-      "artist_image_link": "https://images.unsplash.com/photo-1558369981-f9ca78462e61?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=794&q=80",
-      "start_time": "2035-04-08T20:00:00.000Z"
-    }, {
-      "artist_id": 6,
-      "artist_name": "The Wild Sax Band",
-      "artist_image_link": "https://images.unsplash.com/photo-1558369981-f9ca78462e61?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=794&q=80",
-      "start_time": "2035-04-15T20:00:00.000Z"
-    }],
-    "past_shows_count": 1,
-    "upcoming_shows_count": 1,
-  }
-  data = list(filter(lambda d: d['id'] == venue_id, [data1, data2, data3]))[0]
+  data = _show_venue(venue_id)
   return render_template('pages/show_venue.html', venue=data)
 
 #  Create Venue
